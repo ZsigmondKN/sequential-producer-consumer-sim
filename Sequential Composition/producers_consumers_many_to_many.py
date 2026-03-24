@@ -53,6 +53,9 @@ def consumer(state: ConsumerState, simulation_state: SimulationState, sim_config
     output_type = node.consumer.output
     consumption_time = node.consumer.consumption_time
 
+    if is_machine_failed(state.item_type, sim_time, simulation_state):
+        return
+
     # abort if not ready or nothing to consume
     if sim_time < state.next_ready_time or simulation_state.queues[input_type] <= 0:
         return
@@ -81,7 +84,7 @@ def consumer(state: ConsumerState, simulation_state: SimulationState, sim_config
         # output will appear when the process finishes
         simulation_state.pending_outputs.append((state.next_ready_time, output_type))
 
-def get_delayed_queue_size(history: list[tuple[float, int]], current_time: float, delay: float) -> int:
+def get_queue_size(history: list[tuple[float, int]], current_time: float, delay: float) -> int:
     """Returns the size of the queue exactly 'delay' seconds ago."""
     target_time = current_time - delay
     # Assume empty before the delay period has passed
@@ -96,7 +99,7 @@ def get_delayed_queue_size(history: list[tuple[float, int]], current_time: float
 def calculate_adjusted_time(base_time: float, target_queue_size: int, reaction_sensitivity: float, 
     feedback_delay: float, queue_history: list[tuple[float, int]], sim_time: float) -> float:
     """Calculates the adjusted processing time using a smooth bounded S-curve."""
-    delayed_queue = get_delayed_queue_size(queue_history, sim_time, feedback_delay)
+    delayed_queue = get_queue_size(queue_history, sim_time, feedback_delay)
     dif_from_target = target_queue_size - delayed_queue
     
     # Calculate the raw control signal
@@ -218,7 +221,7 @@ def plot_producer_consumer_rates(ax: plt.Axes, start_time: float, producer_logs:
     ax.grid(alpha=0.4, linestyle=":")
     ax.legend()
 
-def plot_queue_size_over_time(ax: plt.Axes, start_time: float, queue_logs: list[QueueLogs]) -> None:
+def plot_queue_size_over_time(ax: plt.Axes, start_time: float, queue_logs: list[QueueLogs], shocks=None) -> None:
     queues: dict[str, list[QueueLogs]] = {}
 
     for log in queue_logs:
@@ -234,6 +237,11 @@ def plot_queue_size_over_time(ax: plt.Axes, start_time: float, queue_logs: list[
         line, = ax.plot(time_steps, queue_usages, label=queue_name)
         ax.fill_between(time_steps, queue_usages, alpha=0.15, color=line.get_color())
 
+    if shocks:
+        for shock in shocks:
+            ax.axvline(shock.start_time, linestyle="--", color="red", alpha=0.8)
+            ax.axvline(shock.end_time, linestyle="--", color="red", alpha=0.8)
+            ax.axvspan(shock.start_time, shock.end_time, color="red", alpha=0.15, label="Shock")
     ax.set(
         xlabel="Time (seconds)",
         ylabel="Queue size",
@@ -242,12 +250,12 @@ def plot_queue_size_over_time(ax: plt.Axes, start_time: float, queue_logs: list[
     ax.grid(alpha=0.4, linestyle=":")
     ax.legend()
 
-def plot_results(simulation_state: SimulationState, start_time: float = 0.0) -> None:
+def plot_results(simulation_state: SimulationState, start_time: float = 0.0, shocks=None) -> None:
     """Create one figure containing subplots."""
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(8, 6))
 
     plot_producer_consumer_rates(ax1, start_time, simulation_state.producer_logs, simulation_state.consumer_logs)
-    plot_queue_size_over_time(ax2, start_time, simulation_state.queue_logs)
+    plot_queue_size_over_time(ax2, start_time, simulation_state.queue_logs, shocks)
 
     plt.tight_layout()
     plt.show()
@@ -270,7 +278,8 @@ def create_simulation_state(sim_config: SimConfig) -> SimulationState:
         queue_logs=[],
         queues=queues,
         queue_history=queue_history,
-        pending_outputs=[]
+        pending_outputs=[],
+        shocks=[]
     )
 
 def create_producer_consumer_states(sim_config: SimConfig) -> tuple[list[ProducerState], list[ConsumerState]]:
@@ -286,9 +295,10 @@ def create_producer_consumer_states(sim_config: SimConfig) -> tuple[list[Produce
 
     return producers, consumers
 
-def run_simulation(sim_config: SimConfig) -> SimulationState:
+def run_simulation(sim_config: SimConfig, shocks=None) -> SimulationState:
     """Run the simulation as event-driven, with the data defined in the provided sim_config dataclass """
     simulation_state = create_simulation_state(sim_config)
+    simulation_state.shocks = shocks if shocks is not None else []
     producers_state, consumers_state = create_producer_consumer_states(sim_config)
     sim_time = 0.0
     duration = sim_config.simulation_timeout_in_seconds
@@ -533,11 +543,11 @@ def run_stability_analysis():
     logging.info(f"Running {len(sensitivities) * len(delays)} stability experiments...")
     run_stability_experiment(base_config, sensitivities, delays)
 
-def run_individual(sim_config: SimConfig) -> None:
-    sim_state = run_simulation(sim_config)
+def run_individual(sim_config: SimConfig, shocks=None) -> None:
+    sim_state = run_simulation(sim_config, shocks)
     log_simulation_parameters(sim_config)
     log_results(sim_state)
-    plot_results(sim_state)
+    plot_results(sim_state, shocks=shocks)
 
 # ==================================================================================================
 # Sim Config Population
@@ -548,7 +558,7 @@ def create_sim_config(reaction_sensitivity: float, feedback_delay: float) -> Sim
         simulation_timeout_in_seconds=800,
         queue_interval=1.0,
         use_feedback=True,
-        feedback_type = FeedbackType.DUAL,
+        feedback_type = FeedbackType.OUTPUT,
         nodes={
             ItemType.IRON_INGOT: NodeConfig(
                 queue_size=100,
@@ -598,6 +608,13 @@ def create_sim_config(reaction_sensitivity: float, feedback_delay: float) -> Sim
         }
     )
 
+def is_machine_failed(item_type: ItemType, sim_time: float, simulation_state: SimulationState) -> bool:
+    for shock in simulation_state.shocks:
+        if shock.item_type == item_type:
+            if shock.start_time <= sim_time <= shock.end_time:
+                return True
+    return False
+
 # ==================================================================================================
 # Main function
 # ==================================================================================================
@@ -610,6 +627,13 @@ def main() -> None:
     # run_stability_analysis()
 
     # ======== Individual Scenarios ========
+    shocks = [
+        ShockEvent(
+            item_type=ItemType.IRON_ROD,
+            start_time=200,
+            end_time=250
+        )
+    ]
     for scenario in [
         sim_scenarios.get_multiple_oscillations_input_f,
         sim_scenarios.get_multiple_oscillations_output_f,
@@ -618,17 +642,17 @@ def main() -> None:
 
         sim_config, stability_config = scenario()
 
-        run_individual(sim_config)
+        run_individual(sim_config, shocks)
 
-        logging.info(
-            f"Running {len(stability_config['sensitivities']) * len(stability_config['delays'])} stability experiments..."
-        )
+        # logging.info(
+        #     f"Running {len(stability_config['sensitivities']) * len(stability_config['delays'])} stability experiments..."
+        # )
 
-        run_stability_experiment(
-            sim_config,
-            stability_config["sensitivities"],
-            stability_config["delays"]
-        )
+        # run_stability_experiment(
+        #     sim_config,
+        #     stability_config["sensitivities"],
+        #     stability_config["delays"]
+        # )
 
 if __name__ == '__main__':
     main()
