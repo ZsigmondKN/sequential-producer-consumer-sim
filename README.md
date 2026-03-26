@@ -1,23 +1,23 @@
-# Repository Objectives
+# Sequential Producer-Consumer System
 
-This repository contains Python implementations of producer-consumer systems used in my dissertation. The objective is to simulate sequentially composed producer-consumer systems and to observe the dynamics that are produced.
+![Sequentially composed dynamics example](docs//images/example_1.png)
+## Overview
+A discrete event simulation tool used to simulate sequential composed producer–consumer systems. The internal dynamics of the simulation are recorded and expressed as diagrams of throughput and queue utilisation. The simulator is used to understand the effect of the composition of such systems under different conditions exploring sequence length, feedback type and external shocks.
 
-## Structure
+## Tech Stack
+- Python 3  
+- NumPy (numerical computation)  
+- Matplotlib (visualisation)  
+- Optuna (parameter tuning)
 
-### Sequential Composition
-Implementations using Python’s `multiprocessing` library.
-- **producers_many_consumers_many.py** — Multiple producers and multiple consumers.
+## Key Features
+- Event-driven simulation of multi-stage producer–consumer systems
+- Support for different feedback strategies (input/output/dual)  
+- Visualisation of throughput and queue dynamics over time
+- System stability diagrams and parameter tuning using Optuna 
 
-### Multiprocessing
-Implementations using Python’s `multiprocessing` library.
-- **producer_consumer_basic.py** — Minimal single producer-consumer example.
-- **producer_consumer_busy_wait.py** — Busy waiting implementation.
-- **producer_consumer_waiting.py** — Using synchronization primitives.
-- **producers_multiple_consumers_multiple.py** — Multiple producers and consumers.
+## How to Run
 
-### Multithreading
-Implementations using Python’s `threading` library.
-- **producer_consumer_one_to_one.py** — Single producer and single consumer.
-- **producer_consumer_one_to_many.py** — One producer, multiple consumers.
-- **producers_many_consumer_one.py** — Multiple producers, single consumer.
-- **producers_many_consumers_many.py** — Multiple producers and multiple consumers.
+1. Clone the repository  
+2. Install dependencies using: `pip install -r requirements.txt`
+3. Run the simulation using: `python sim_runtime.py`
