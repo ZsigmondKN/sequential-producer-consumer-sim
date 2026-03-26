@@ -12,7 +12,7 @@ from sim_dataclasses import *
 
 # --------------------------------------------------------------------------------------------------
 # Running instructions 
-#   RUN - python producers_consumers_many_to_many.py
+#   RUN - python sim_runtime.py 
 # --------------------------------------------------------------------------------------------------
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s: %(message)s", datefmt="%H:%M:%S")
