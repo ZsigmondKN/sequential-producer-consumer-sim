@@ -21,12 +21,12 @@ def get_multiple_oscillations_dual_f() -> tuple[SimConfig, dict]:
         feedback_type=FeedbackType.DUAL,
         nodes={
             ItemType.IRON_INGOT: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 producer=ProducerConfig(
                     count=1,
                     output=ItemType.IRON_INGOT,
                     production_time=0.5,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=0.09996484739955049,
                     feedback_delay=19.06984611636426,
                 ),
@@ -35,30 +35,30 @@ def get_multiple_oscillations_dual_f() -> tuple[SimConfig, dict]:
                     input=ItemType.IRON_INGOT,
                     output=ItemType.IRON_ROD,
                     consumption_time=0.5,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=0.09996484739955049,
                     feedback_delay=19.06984611636426,
                 ),
             ),
             ItemType.IRON_ROD: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1,
                     input=ItemType.IRON_ROD,
                     output=ItemType.IRON_WIRE,
                     consumption_time=1.0,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=0.09996484739955049,
                     feedback_delay=19.06984611636426,
                 ),
             ),
             ItemType.IRON_WIRE: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1,
                     input=ItemType.IRON_WIRE,
                     consumption_time=1.0,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=0.09996484739955049,
                     feedback_delay=19.06984611636426,
                 ),
@@ -83,12 +83,12 @@ def get_multiple_oscillations_input_f() -> tuple[SimConfig, dict]:
         feedback_type=FeedbackType.INPUT,
         nodes={
             ItemType.IRON_INGOT: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 producer=ProducerConfig(
                     count=1,
                     output=ItemType.IRON_INGOT,
                     production_time=0.5,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=0.016486536720973884,
                     feedback_delay=25.657783155731092,
                 ),
@@ -97,30 +97,30 @@ def get_multiple_oscillations_input_f() -> tuple[SimConfig, dict]:
                     input=ItemType.IRON_INGOT,
                     output=ItemType.IRON_ROD,
                     consumption_time=0.5,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=0.016486536720973884,
                     feedback_delay=25.657783155731092,
                 ),
             ),
             ItemType.IRON_ROD: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1,
                     input=ItemType.IRON_ROD,
                     output=ItemType.IRON_WIRE,
                     consumption_time=1.0,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=0.016486536720973884,
                     feedback_delay=25.657783155731092,
                 ),
             ),
             ItemType.IRON_WIRE: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1,
                     input=ItemType.IRON_WIRE,
                     consumption_time=1.0,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=0.016486536720973884,
                     feedback_delay=25.657783155731092,
                 ),
@@ -143,12 +143,12 @@ def get_multiple_oscillations_output_f() -> tuple[dict, SimConfig]:
         feedback_type = FeedbackType.OUTPUT,
         nodes={
             ItemType.IRON_INGOT: NodeConfig(
-                queue_size=100,  
+                queue_capacity=100,  
                 producer=ProducerConfig(
                     count=1, 
                     output=ItemType.IRON_INGOT, 
                     production_time=1.0,        
-                    target_queue_size=50, 
+                    target_queue_occupancy=50, 
                     reaction_sensitivity=0.1437399434876802, 
                     feedback_delay=19.651752527891375         
                 ),
@@ -157,32 +157,32 @@ def get_multiple_oscillations_output_f() -> tuple[dict, SimConfig]:
                     input=ItemType.IRON_INGOT, 
                     output=ItemType.IRON_ROD,
                     consumption_time=1.0, 
-                    target_queue_size=50, 
+                    target_queue_occupancy=50, 
                     reaction_sensitivity=0.1437399434876802, 
                     feedback_delay=19.651752527891375
                 ),
             ),
 
             ItemType.IRON_ROD: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1, 
                     input=ItemType.IRON_ROD, 
                     output=ItemType.IRON_WIRE,
                     consumption_time=1.0, 
-                    target_queue_size=50, 
+                    target_queue_occupancy=50, 
                     reaction_sensitivity=0.1437399434876802, 
                     feedback_delay=19.651752527891375
                 ),
             ),
 
             ItemType.IRON_WIRE: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1, 
                     input=ItemType.IRON_WIRE, 
                     consumption_time=1.0,
-                    target_queue_size=50, 
+                    target_queue_occupancy=50, 
                     reaction_sensitivity=0.1437399434876802, 
                     feedback_delay=19.651752527891375
                 ),
@@ -200,12 +200,12 @@ def get_a_single_oscillation() -> SimConfig:
         feedback_type = FeedbackType.OUTPUT,
         nodes={
             ItemType.IRON_INGOT: NodeConfig(
-                queue_size=200,
+                queue_capacity=200,
                 producer=ProducerConfig(
                     count=1,
                     output=ItemType.IRON_INGOT,
                     production_time=1.0,
-                    target_queue_size=100,
+                    target_queue_occupancy=100,
                     reaction_sensitivity=0.19647332747872684,
                     feedback_delay=19.109745987839684
                 ),
@@ -227,12 +227,12 @@ def get_smooth_waves() -> SimConfig:
         feedback_type = FeedbackType.OUTPUT,
         nodes={
             ItemType.IRON_INGOT: NodeConfig(
-                queue_size=250,  
+                queue_capacity=250,  
                 producer=ProducerConfig(
                     count=1, 
                     output=ItemType.IRON_INGOT, 
                     production_time=1.0,        
-                    target_queue_size=125, 
+                    target_queue_occupancy=125, 
                     reaction_sensitivity=0.05, 
                     feedback_delay=12.0         
                 ),
@@ -241,25 +241,25 @@ def get_smooth_waves() -> SimConfig:
                     input=ItemType.IRON_INGOT, 
                     output=ItemType.IRON_ROD,
                     consumption_time=1.0, 
-                    target_queue_size=125, 
+                    target_queue_occupancy=125, 
                     reaction_sensitivity=0.05, 
                     feedback_delay=12.0
                 ),
             ),
             ItemType.IRON_ROD: NodeConfig(
-                queue_size=250,
+                queue_capacity=250,
                 consumer=ConsumerConfig(
                     count=1, 
                     input=ItemType.IRON_ROD, 
                     output=ItemType.IRON_WIRE,
                     consumption_time=1.0, 
-                    target_queue_size=125, 
+                    target_queue_occupancy=125, 
                     reaction_sensitivity=0.05, 
                     feedback_delay=12.0
                 ),
             ),
             ItemType.IRON_WIRE: NodeConfig(
-                queue_size=250,
+                queue_capacity=250,
                 consumer=ConsumerConfig(
                     count=1, 
                     input=ItemType.IRON_WIRE, 
@@ -278,7 +278,7 @@ def get_blocking() -> SimConfig:
         feedback_type = FeedbackType.OUTPUT,
         nodes={
             ItemType.IRON_INGOT: NodeConfig(
-                queue_size=10,  
+                queue_capacity=10,  
                 producer=ProducerConfig(
                     count=1, 
                     output=ItemType.IRON_INGOT, 
@@ -292,7 +292,7 @@ def get_blocking() -> SimConfig:
                 ),
             ),
             ItemType.IRON_ROD: NodeConfig(
-                queue_size=10,
+                queue_capacity=10,
                 consumer=ConsumerConfig(
                     count=1, 
                     input=ItemType.IRON_ROD, 
@@ -301,7 +301,7 @@ def get_blocking() -> SimConfig:
                 ),
             ),
             ItemType.IRON_WIRE: NodeConfig(
-                queue_size=10,
+                queue_capacity=10,
                 consumer=ConsumerConfig(
                     count=1, 
                     input=ItemType.IRON_WIRE, 

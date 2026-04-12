@@ -30,13 +30,13 @@ def producer(state: ProducerState, simulation_state: SimulationState, sim_config
     if sim_time < state.next_ready_time:
         return
 
-    queue_size = simulation_state.queues[output_type]
-    max_size = sim_config.nodes[output_type].queue_size
-    if queue_size >= max_size:
+    queue_occupancy = simulation_state.queues[output_type]
+    queue_capacity = sim_config.nodes[output_type].queue_capacity
+    if queue_occupancy >= queue_capacity:
         return
     
     if sim_config.use_feedback:
-        next_production_time = compute_feedback_time(base_production_time, node.producer.target_queue_size,
+        next_production_time = compute_feedback_time(base_production_time, node.producer.target_queue_occupancy,
             node.producer.reaction_sensitivity, node.producer.feedback_delay, sim_config, simulation_state,
             None, output_type, sim_time)
     else:
@@ -62,11 +62,11 @@ def consumer(state: ConsumerState, simulation_state: SimulationState, sim_config
     
     # if consumption produces an output, consumption only occures when the output queue has space
     if output_type is not None:
-        if simulation_state.queues[output_type] >= sim_config.nodes[output_type].queue_size:
+        if simulation_state.queues[output_type] >= sim_config.nodes[output_type].queue_capacity:
             return
         
     if sim_config.use_feedback:
-        adjusted_consumption_time = compute_feedback_time(consumption_time, node.consumer.target_queue_size,
+        adjusted_consumption_time = compute_feedback_time(consumption_time, node.consumer.target_queue_occupancy,
             node.consumer.reaction_sensitivity, node.consumer.feedback_delay, sim_config, simulation_state,
             input_type, output_type, sim_time)
     else:
@@ -84,23 +84,23 @@ def consumer(state: ConsumerState, simulation_state: SimulationState, sim_config
         # output will appear when the process finishes
         simulation_state.pending_outputs.append((state.next_ready_time, output_type))
 
-def get_queue_size(history: list[tuple[float, int]], current_time: float, delay: float) -> int:
-    """Returns the size of the queue exactly 'delay' seconds ago."""
+def get_queue_occupancy(history: list[tuple[float, int]], current_time: float, delay: float) -> int:
+    """Returns the occupancy of the queue exactly 'delay' seconds ago."""
     target_time = current_time - delay
     # Assume empty before the delay period has passed
     if target_time <= 0.0:
         return history[0][1]
     
-    for timestamp, size in reversed(history):
+    for timestamp, occupancy in reversed(history):
         if timestamp <= target_time:
-            return size
+            return occupancy
     return 0
 
-def calculate_adjusted_time(base_time: float, target_queue_size: int, reaction_sensitivity: float, 
+def calculate_adjusted_time(base_time: float, target_queue_occupancy: int, reaction_sensitivity: float, 
     feedback_delay: float, queue_history: list[tuple[float, int]], sim_time: float) -> float:
     """Calculates the adjusted processing time using a smooth bounded S-curve."""
-    delayed_queue = get_queue_size(queue_history, sim_time, feedback_delay)
-    dif_from_target = target_queue_size - delayed_queue
+    delayed_queue = get_queue_occupancy(queue_history, sim_time, feedback_delay)
+    dif_from_target = target_queue_occupancy - delayed_queue
     
     # Calculate the raw control signal
     control_signal = reaction_sensitivity * dif_from_target
@@ -151,7 +151,7 @@ def log_simulation_parameters(sim_config: SimConfig) -> None:
     logging.info(f"Feedback enabled: {sim_config.use_feedback}")
 
     for item_type, node_config in sim_config.nodes.items():
-        config_info = f"The {item_type.value} node has - queue size: {node_config.queue_size}"
+        config_info = f"The {item_type.value} node has - queue occupancy: {node_config.queue_capacity}"
         if node_config.producer.count > 0:
             config_info += (
                 f" | producer/s count: {node_config.producer.count}"
@@ -159,7 +159,7 @@ def log_simulation_parameters(sim_config: SimConfig) -> None:
             )
             if sim_config.use_feedback:
                 config_info += (
-                    f" | target queue: {node_config.producer.target_queue_size}"
+                    f" | target queue: {node_config.producer.target_queue_occupancy}"
                     f" | sensitivity: {node_config.producer.reaction_sensitivity}"
                     f" | delay: {node_config.producer.feedback_delay}"
                 )
@@ -170,7 +170,7 @@ def log_simulation_parameters(sim_config: SimConfig) -> None:
             )
             if sim_config.use_feedback:
                 config_info += (
-                    f" | target queue: {node_config.consumer.target_queue_size}"
+                    f" | target queue: {node_config.consumer.target_queue_occupancy}"
                     f" | sensitivity: {node_config.consumer.reaction_sensitivity}"
                     f" | delay: {node_config.consumer.feedback_delay}"
                 )
@@ -216,12 +216,12 @@ def plot_producer_consumer_rates(ax: plt.Axes, start_time: float, producer_logs:
     ax.set(
         xlabel="Time (seconds)",
         ylabel="Items per second",
-        title=f"Production & Consumption Throughput (bucket={bucket_size}s)",
+        title=f"Node Throughput Rates",
     )
     ax.grid(alpha=0.4, linestyle=":")
     ax.legend()
 
-def plot_queue_size_over_time(ax: plt.Axes, start_time: float, queue_logs: list[QueueLogs], shocks=None) -> None:
+def plot_queue_occupancy_over_time(ax: plt.Axes, start_time: float, queue_logs: list[QueueLogs], shocks=None) -> None:
     queues: dict[str, list[QueueLogs]] = {}
 
     for log in queue_logs:
@@ -244,8 +244,8 @@ def plot_queue_size_over_time(ax: plt.Axes, start_time: float, queue_logs: list[
             ax.axvspan(shock.start_time, shock.end_time, color="red", alpha=0.15, label="Shock")
     ax.set(
         xlabel="Time (seconds)",
-        ylabel="Queue size",
-        title="Queue Sizes Over Time (1-second buckets)",
+        ylabel="Queue occupancy",
+        title="Queue State Dynamics",
     )
     ax.grid(alpha=0.4, linestyle=":")
     ax.legend()
@@ -255,7 +255,7 @@ def plot_results(simulation_state: SimulationState, start_time: float = 0.0, sho
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(8, 6))
 
     plot_producer_consumer_rates(ax1, start_time, simulation_state.producer_logs, simulation_state.consumer_logs)
-    plot_queue_size_over_time(ax2, start_time, simulation_state.queue_logs, shocks)
+    plot_queue_occupancy_over_time(ax2, start_time, simulation_state.queue_logs, shocks)
 
     plt.tight_layout()
     plt.show()
@@ -334,10 +334,10 @@ def run_simulation(sim_config: SimConfig, shocks=None) -> SimulationState:
         if next_event_time is None or next_event_time > duration:
             break
 
-        # log queue sizes at the defined fixed intervals
+        # log queue occupancies at the defined fixed intervals
         while next_queue_log_time <= next_event_time:
-            for item_type, size in simulation_state.queues.items():
-                simulation_state.queue_logs.append(QueueLogs(item_type.value, size, next_queue_log_time))
+            for item_type, occupancy in simulation_state.queues.items():
+                simulation_state.queue_logs.append(QueueLogs(item_type.value, occupancy, next_queue_log_time))
             next_queue_log_time += queue_interval
         
         sim_time = next_event_time
@@ -370,7 +370,7 @@ def objective(trial):
     score = 0
     for item in sim_config.nodes:
         series = queues[item.value]
-        capacity = sim_config.nodes[item].queue_size
+        capacity = sim_config.nodes[item].queue_capacity
         score += oscillation_score(series, capacity)
 
     return float(score)
@@ -410,14 +410,14 @@ def apply_feedback_params(sim_config: SimConfig, sensitivity: float, delay: floa
         producer = node.producer
         consumer = node.consumer
 
-        if producer and producer.target_queue_size is not None:
+        if producer and producer.target_queue_occupancy is not None:
             producer = replace(
                 producer,
                 reaction_sensitivity=sensitivity,
                 feedback_delay=delay
             )
 
-        if consumer and consumer.target_queue_size is not None:
+        if consumer and consumer.target_queue_occupancy is not None:
             consumer = replace(
                 consumer,
                 reaction_sensitivity=sensitivity,
@@ -561,12 +561,12 @@ def create_sim_config(reaction_sensitivity: float, feedback_delay: float) -> Sim
         feedback_type = FeedbackType.OUTPUT,
         nodes={
             ItemType.IRON_INGOT: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 producer=ProducerConfig(
                     count=1,
                     output=ItemType.IRON_INGOT,
                     production_time=0.5,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=reaction_sensitivity,
                     feedback_delay=feedback_delay
                 ),
@@ -575,32 +575,32 @@ def create_sim_config(reaction_sensitivity: float, feedback_delay: float) -> Sim
                     input=ItemType.IRON_INGOT,
                     output=ItemType.IRON_ROD,
                     consumption_time=0.5,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=reaction_sensitivity,
                     feedback_delay=feedback_delay
                 ),
             ),
 
             ItemType.IRON_ROD: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1,
                     input=ItemType.IRON_ROD,
                     output=ItemType.IRON_WIRE,
                     consumption_time=1.0,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=reaction_sensitivity,
                     feedback_delay=feedback_delay
                 ),
             ),
 
             ItemType.IRON_WIRE: NodeConfig(
-                queue_size=100,
+                queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1,
                     input=ItemType.IRON_WIRE,
                     consumption_time=1.0,
-                    target_queue_size=50,
+                    target_queue_occupancy=50,
                     reaction_sensitivity=reaction_sensitivity,
                     feedback_delay=feedback_delay
                 ),

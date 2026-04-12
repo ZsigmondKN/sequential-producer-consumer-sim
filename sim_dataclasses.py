@@ -62,7 +62,7 @@ class ProducerConfig:
     output: ItemType | None = None
     production_time: float | None = None
     # P-Control below
-    target_queue_size: int | None = None
+    target_queue_occupancy: int | None = None
     reaction_sensitivity: float = 0.0
     feedback_delay: float = 0.0
 
@@ -73,13 +73,13 @@ class ConsumerConfig:
     output: ItemType | None = None
     consumption_time: float | None = None
     # P-Control below
-    target_queue_size: int | None = None
+    target_queue_occupancy: int | None = None
     reaction_sensitivity: float = 0.0
     feedback_delay: float = 0.0
 
 @dataclass(frozen=True)
 class NodeConfig:
-    queue_size: int
+    queue_capacity: int
     producer: ProducerConfig = ProducerConfig()
     consumer: ConsumerConfig = ConsumerConfig()
 
