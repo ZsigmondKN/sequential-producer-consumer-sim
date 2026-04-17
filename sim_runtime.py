@@ -432,12 +432,116 @@ def apply_feedback_params(sim_config: SimConfig, sensitivity: float, delay: floa
 
     return replace(sim_config, nodes=new_nodes)
 
+def stability_metrics(series):
+    """Return stability components separately."""
+    if len(series) < 10:
+        return 0, 0, 0
+    
+    # Core metric - capture variability from equilibrium
+    standard_deviation = np.std(series)
+
+    # Capture the magnitude of step-to-step changes
+    step_variability = np.std(np.diff(series))
+
+    # Capture long-term drift 
+    time_idx = np.arange(len(series))
+    drift = np.polyfit(time_idx, series, 1)[0]
+
+    return standard_deviation, step_variability, drift
+
+def rerun_point(base_config, sensitivities, delays, idx):
+    i, j = idx
+    s = sensitivities[i]
+    d = delays[j]
+    cfg = apply_feedback_params(base_config, s, d)
+    return run_simulation(cfg), s, d
+
+def plot_multiple_heatmaps(base_config, sensitivities, delays, std_matrix, diff_matrix, drift_matrix, 
+                           max_std, max_diff, max_drift, feedback_type):
+    fig, axes = plt.subplots(2, 3, figsize=(14, 8))
+    top_axes = axes[0]
+    bottom_axes = axes[1]
+
+    map_titles = [
+        "Standard Deviation",
+        "Step Variability",
+        "Drift"
+    ]
+
+    sim_titles = [
+        "Maximum Standard Deviation",
+        "Maximum Step Variability",
+        "Maximum Drift"
+    ]
+
+    matrices = [std_matrix, diff_matrix, drift_matrix]
+    max_points = [max_std, max_diff, max_drift]
+
+    for ax, matrix, max_point, map_title in zip(top_axes, matrices, max_points, map_titles):
+        dx = delays[1] - delays[0]
+        dy = sensitivities[1] - sensitivities[0]
+
+        extent = [
+            delays[0] - dx/2,
+            delays[-1] + dx/2,
+            sensitivities[0] - dy/2,
+            sensitivities[-1] + dy/2
+        ]
+        im = ax.imshow(
+            matrix,
+            origin='lower',
+            aspect='auto',
+            extent=extent
+        )
+
+        i, j = max_point[1]
+
+        d_center = delays[j] + 0.1 # offset to align with the center of the cell
+        s_center = sensitivities[i]
+
+        ax.plot(d_center, s_center, 'ro', label='Maximum instability')
+        ax.legend()
+
+        ax.set_title(map_title)
+        ax.set_xlabel("Delay")
+        ax.set_ylabel("Sensitivity")
+        fig.colorbar(im, ax=ax)
+
+    for ax, max_point, sim_title in zip(bottom_axes, max_points, sim_titles):
+        sim_state, s, d = rerun_point(base_config, sensitivities, delays, max_point[1])
+
+        plot_queue_occupancy_over_time(ax, 0.0, sim_state.queue_logs)
+
+        ax.set_title(sim_title)
+
+    plt.suptitle(f"System Stability Breakdown – {feedback_type.name.title()}")
+    plt.tight_layout()
+    plt.show()
+
+def plot_stability_heatmap(sensitivities, delays, matrix, feedback_type):
+    plt.figure(figsize=(8,6))
+    plt.imshow(
+        matrix,
+        origin='lower',
+        aspect='auto',
+        extent=[delays[0], delays[-1], sensitivities[0], sensitivities[-1]]
+    )
+    plt.colorbar(label="Instability Score")
+
+    plt.xlabel("Feedback Delay")
+    plt.ylabel("Reaction Sensitivity")
+    plt.title(f"System Stability – {feedback_type.name.title()} Feedback")
+
+    plt.show()
+
 def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode=None):
     std_matrix = np.zeros((len(sensitivities), len(delays)))
+    diff_matrix = np.zeros((len(sensitivities), len(delays)))
+    drift_matrix = np.zeros((len(sensitivities), len(delays)))
 
-    # Only used in debug mode
-    diff_matrix = np.zeros_like(std_matrix)
-    drift_matrix = np.zeros_like(std_matrix)
+    max_std = (-np.inf, None)
+    max_diff = (-np.inf, None)
+    max_drift = (-np.inf, None)
 
     def extract_queue_series(sim_config, sim_state, warmup_cutoff):
         queues = {item.value: [] for item in sim_config.nodes}
@@ -470,20 +574,29 @@ def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode
                 drift_score += drift
 
             std_matrix[i, j] = std_score
+            diff_matrix[i, j] = diff_score
+            drift_matrix[i, j] = drift_score
 
-            if mode == "debug":
-                diff_matrix[i, j] = diff_score
-                drift_matrix[i, j] = drift_score
+            if std_score > max_std[0]:
+                max_std = (std_score, (i, j))
+
+            if diff_score > max_diff[0]:
+                max_diff = (diff_score, (i, j))
+
+            if drift_score > max_drift[0]:
+                max_drift = (drift_score, (i, j))
 
     logging.info("\n--- Stability Experiment Finished ---")
     logging.info(
         f"Grid searched {len(sensitivities) * len(delays)} parameter combinations "
         f"({len(sensitivities)} sensitivities × {len(delays)} delays)")
 
-    if mode == "debug":
+    if mode == "complete":
         plot_multiple_heatmaps(
+            base_config,
             sensitivities, delays,
             std_matrix, diff_matrix, drift_matrix,
+            max_std, max_diff, max_drift,
             base_config.feedback_type
         )
     else:
@@ -493,65 +606,6 @@ def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode
             title_suffix="(Standard Deviation)"
         )
 
-def stability_metrics(series):
-    """Return stability components separately."""
-    if len(series) < 10:
-        return 0, 0, 0
-    
-    # Core metric - capture variability from equilibrium
-    standard_deviation = np.std(series)
-
-    # Capture the magnitude of step-to-step changes
-    step_variability = np.std(np.diff(series))
-
-    # Capture long-term drift 
-    time_idx = np.arange(len(series))
-    drift = np.polyfit(time_idx, series, 1)[0]
-
-    return standard_deviation, step_variability, drift
-
-def plot_stability_heatmap(sensitivities, delays, matrix, feedback_type):
-    plt.figure(figsize=(8,6))
-    plt.imshow(
-        matrix,
-        origin='lower',
-        aspect='auto',
-        extent=[delays[0], delays[-1], sensitivities[0], sensitivities[-1]]
-    )
-    plt.colorbar(label="Instability Score")
-
-    plt.xlabel("Feedback Delay")
-    plt.ylabel("Reaction Sensitivity")
-    plt.title(f"System Stability – {feedback_type.name.title()} Feedback")
-
-    plt.show()
-
-def plot_multiple_heatmaps(sensitivities, delays, std_matrix, diff_matrix, drift_matrix, feedback_type):
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-
-    titles = [
-        "Standard Deviation (Amplitude)",
-        "Step Variability (Oscillation Intensity)",
-        "Drift (Trend)"
-    ]
-
-    matrices = [std_matrix, diff_matrix, drift_matrix]
-
-    for ax, matrix, title in zip(axes, matrices, titles):
-        im = ax.imshow(
-            matrix,
-            origin='lower',
-            aspect='auto',
-            extent=[delays[0], delays[-1], sensitivities[0], sensitivities[-1]]
-        )
-        ax.set_title(title)
-        ax.set_xlabel("Delay")
-        ax.set_ylabel("Sensitivity")
-        fig.colorbar(im, ax=ax)
-
-    plt.suptitle(f"System Stability Breakdown – {feedback_type.name.title()}")
-    plt.tight_layout()
-    plt.show()
 
 # ==================================================================================================
 # Simulation Types
@@ -702,7 +756,7 @@ def main() -> None:
             sim_config,
             stability_config["sensitivities"],
             stability_config["delays"],
-            "debug"
+            "complete"
         )
 
 if __name__ == '__main__':
