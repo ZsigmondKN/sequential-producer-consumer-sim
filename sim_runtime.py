@@ -432,11 +432,12 @@ def apply_feedback_params(sim_config: SimConfig, sensitivity: float, delay: floa
 
     return replace(sim_config, nodes=new_nodes)
 
-def run_stability_experiment(base_config: SimConfig, sensitivities, delays):
-    stability_matrix = np.zeros((len(sensitivities), len(delays)))
+def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode=None):
+    std_matrix = np.zeros((len(sensitivities), len(delays)))
 
-    best_score = float("inf")
-    best_params = None
+    # Only used in debug mode
+    diff_matrix = np.zeros_like(std_matrix)
+    drift_matrix = np.zeros_like(std_matrix)
 
     def extract_queue_series(sim_config, sim_state, warmup_cutoff):
         queues = {item.value: [] for item in sim_config.nodes}
@@ -455,37 +456,59 @@ def run_stability_experiment(base_config: SimConfig, sensitivities, delays):
             warmup_cutoff = sim_config.simulation_timeout_in_seconds * 0.5
             queues = extract_queue_series(sim_config, sim_state, warmup_cutoff)
 
-            score = 0
+            std_score = 0
+            diff_score = 0
+            drift_score = 0
 
             for item in sim_config.nodes:
                 series = queues[item.value]
-                score += stability_metric(series)
 
-            stability_matrix[i, j] = score
+                std, diff, drift = stability_metrics(series)
 
-            if score < best_score:
-                best_score = score
-                best_params = (sensitivity, delay)
+                std_score += std
+                diff_score += diff
+                drift_score += drift
+
+            std_matrix[i, j] = std_score
+
+            if mode == "debug":
+                diff_matrix[i, j] = diff_score
+                drift_matrix[i, j] = drift_score
 
     logging.info("\n--- Stability Experiment Finished ---")
     logging.info(
         f"Grid searched {len(sensitivities) * len(delays)} parameter combinations "
         f"({len(sensitivities)} sensitivities × {len(delays)} delays)")
-    logging.info(
-        f"Most Stable Parameters: Sensitivity = {best_params[0]:.4f}, "
-        f"Delay = {best_params[1]:.2f}s")
-    logging.info(f"Stability Score: {best_score:.3f}")
 
-    plot_stability_heatmap(sensitivities, delays, stability_matrix, base_config.feedback_type)
+    if mode == "debug":
+        plot_multiple_heatmaps(
+            sensitivities, delays,
+            std_matrix, diff_matrix, drift_matrix,
+            base_config.feedback_type
+        )
+    else:
+        plot_stability_heatmap(
+            sensitivities, delays, std_matrix,
+            base_config.feedback_type,
+            title_suffix="(Standard Deviation)"
+        )
 
-def stability_metric(series):
-    """Measures whether the queue converges to equilibrium. Low values mean stable, high values mean oscillatory."""
+def stability_metrics(series):
+    """Return stability components separately."""
     if len(series) < 10:
-        return 0
-    std_dev = np.std(series)
-    drift = abs(series[-1] - series[0])
+        return 0, 0, 0
+    
+    # Core metric - capture variability from equilibrium
+    standard_deviation = np.std(series)
 
-    return std_dev + 0.5 * drift
+    # Capture the magnitude of step-to-step changes
+    step_variability = np.std(np.diff(series))
+
+    # Capture long-term drift 
+    time_idx = np.arange(len(series))
+    drift = np.polyfit(time_idx, series, 1)[0]
+
+    return standard_deviation, step_variability, drift
 
 def plot_stability_heatmap(sensitivities, delays, matrix, feedback_type):
     plt.figure(figsize=(8,6))
@@ -501,6 +524,33 @@ def plot_stability_heatmap(sensitivities, delays, matrix, feedback_type):
     plt.ylabel("Reaction Sensitivity")
     plt.title(f"System Stability – {feedback_type.name.title()} Feedback")
 
+    plt.show()
+
+def plot_multiple_heatmaps(sensitivities, delays, std_matrix, diff_matrix, drift_matrix, feedback_type):
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+    titles = [
+        "Standard Deviation (Amplitude)",
+        "Step Variability (Oscillation Intensity)",
+        "Drift (Trend)"
+    ]
+
+    matrices = [std_matrix, diff_matrix, drift_matrix]
+
+    for ax, matrix, title in zip(axes, matrices, titles):
+        im = ax.imshow(
+            matrix,
+            origin='lower',
+            aspect='auto',
+            extent=[delays[0], delays[-1], sensitivities[0], sensitivities[-1]]
+        )
+        ax.set_title(title)
+        ax.set_xlabel("Delay")
+        ax.set_ylabel("Sensitivity")
+        fig.colorbar(im, ax=ax)
+
+    plt.suptitle(f"System Stability Breakdown – {feedback_type.name.title()}")
+    plt.tight_layout()
     plt.show()
 
 # ==================================================================================================
@@ -533,7 +583,7 @@ def run_optuna() -> None:
     log_results(best_sim_state)
     plot_results(best_sim_state)
 
-def run_stability_analysis():
+def run_stability_analysis(mode=None):
 
     sensitivities = np.linspace(0.01, 5, 25)
     delays = np.linspace(1, 100, 25)
@@ -541,7 +591,7 @@ def run_stability_analysis():
     base_config = create_sim_config(0.05, 10)
 
     logging.info(f"Running {len(sensitivities) * len(delays)} stability experiments...")
-    run_stability_experiment(base_config, sensitivities, delays)
+    run_stability_experiment(base_config, sensitivities, delays, mode)
 
 def run_individual(sim_config: SimConfig, shocks=None) -> None:
     sim_state = run_simulation(sim_config, shocks)
@@ -642,17 +692,18 @@ def main() -> None:
 
         sim_config, stability_config = scenario()
 
-        run_individual(sim_config, shocks)
+        run_individual(sim_config)
 
-        # logging.info(
-        #     f"Running {len(stability_config['sensitivities']) * len(stability_config['delays'])} stability experiments..."
-        # )
+        logging.info(
+            f"Running {len(stability_config['sensitivities']) * len(stability_config['delays'])} stability experiments..."
+        )
 
-        # run_stability_experiment(
-        #     sim_config,
-        #     stability_config["sensitivities"],
-        #     stability_config["delays"]
-        # )
+        run_stability_experiment(
+            sim_config,
+            stability_config["sensitivities"],
+            stability_config["delays"],
+            "debug"
+        )
 
 if __name__ == '__main__':
     main()
