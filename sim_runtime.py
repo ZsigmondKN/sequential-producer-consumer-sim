@@ -23,21 +23,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s: %(m
 
 def producer(state: ProducerState, simulation_state: SimulationState, sim_config: SimConfig, sim_time: float) -> None:
     """Run a producer process that generates the specified item type and places them into a queue."""
-    node = sim_config.nodes[state.item_type]
-    output_type = node.producer.output
-    base_production_time = node.producer.production_time
+    process = sim_config.processes[state.item_type]
+    output_type = process.producer.output
+    base_production_time = process.producer.production_time
 
     if sim_time < state.next_ready_time:
         return
 
     queue_occupancy = simulation_state.queues[output_type]
-    queue_capacity = sim_config.nodes[output_type].queue_capacity
+    queue_capacity = sim_config.processes[output_type].queue_capacity
     if queue_occupancy >= queue_capacity:
         return
     
     if sim_config.use_feedback:
-        next_production_time = compute_feedback_time(base_production_time, node.producer.target_queue_occupancy,
-            node.producer.reaction_sensitivity, node.producer.feedback_delay, sim_config, simulation_state,
+        next_production_time = compute_feedback_time(base_production_time, process.producer.target_queue_occupancy,
+            process.producer.reaction_sensitivity, process.producer.feedback_delay, sim_config, simulation_state,
             None, output_type, sim_time)
     else:
         next_production_time = base_production_time
@@ -48,10 +48,10 @@ def producer(state: ProducerState, simulation_state: SimulationState, sim_config
 
 def consumer(state: ConsumerState, simulation_state: SimulationState, sim_config: SimConfig, sim_time: float) -> None:
     """Run a consumer process that retrieves and processes items from the provided queue."""
-    node = sim_config.nodes[state.item_type]
-    input_type = node.consumer.input
-    output_type = node.consumer.output
-    consumption_time = node.consumer.consumption_time
+    process = sim_config.processes[state.item_type]
+    input_type = process.consumer.input
+    output_type = process.consumer.output
+    consumption_time = process.consumer.consumption_time
 
     if is_machine_failed(state.item_type, sim_time, simulation_state):
         return
@@ -62,12 +62,12 @@ def consumer(state: ConsumerState, simulation_state: SimulationState, sim_config
     
     # if consumption produces an output, consumption only occures when the output queue has space
     if output_type is not None:
-        if simulation_state.queues[output_type] >= sim_config.nodes[output_type].queue_capacity:
+        if simulation_state.queues[output_type] >= sim_config.processes[output_type].queue_capacity:
             return
         
     if sim_config.use_feedback:
-        adjusted_consumption_time = compute_feedback_time(consumption_time, node.consumer.target_queue_occupancy,
-            node.consumer.reaction_sensitivity, node.consumer.feedback_delay, sim_config, simulation_state,
+        adjusted_consumption_time = compute_feedback_time(consumption_time, process.consumer.target_queue_occupancy,
+            process.consumer.reaction_sensitivity, process.consumer.feedback_delay, sim_config, simulation_state,
             input_type, output_type, sim_time)
     else:
         adjusted_consumption_time = consumption_time
@@ -150,29 +150,29 @@ def log_simulation_parameters(sim_config: SimConfig) -> None:
     logging.info(f"The simulation will be running for {sim_config.simulation_timeout_in_seconds} seconds.")
     logging.info(f"Feedback enabled: {sim_config.use_feedback}")
 
-    for item_type, node_config in sim_config.nodes.items():
-        config_info = f"The {item_type.value} node has - queue occupancy: {node_config.queue_capacity}"
-        if node_config.producer.count > 0:
+    for item_type, process_config in sim_config.processes.items():
+        config_info = f"The {item_type.value} process has - queue occupancy: {process_config.queue_capacity}"
+        if process_config.producer.count > 0:
             config_info += (
-                f" | producer/s count: {node_config.producer.count}"
-                f" | production time(s): {node_config.producer.production_time}"
+                f" | producer/s count: {process_config.producer.count}"
+                f" | production time(s): {process_config.producer.production_time}"
             )
             if sim_config.use_feedback:
                 config_info += (
-                    f" | target queue: {node_config.producer.target_queue_occupancy}"
-                    f" | sensitivity: {node_config.producer.reaction_sensitivity}"
-                    f" | delay: {node_config.producer.feedback_delay}"
+                    f" | target queue: {process_config.producer.target_queue_occupancy}"
+                    f" | sensitivity: {process_config.producer.reaction_sensitivity}"
+                    f" | delay: {process_config.producer.feedback_delay}"
                 )
-        if node_config.consumer.count > 0:
+        if process_config.consumer.count > 0:
             config_info += (
-                f" | consumer/s count: {node_config.consumer.count}"
-                f" | consumption time(s): {node_config.consumer.consumption_time}"
+                f" | consumer/s count: {process_config.consumer.count}"
+                f" | consumption time(s): {process_config.consumer.consumption_time}"
             )
             if sim_config.use_feedback:
                 config_info += (
-                    f" | target queue: {node_config.consumer.target_queue_occupancy}"
-                    f" | sensitivity: {node_config.consumer.reaction_sensitivity}"
-                    f" | delay: {node_config.consumer.feedback_delay}"
+                    f" | target queue: {process_config.consumer.target_queue_occupancy}"
+                    f" | sensitivity: {process_config.consumer.reaction_sensitivity}"
+                    f" | delay: {process_config.consumer.feedback_delay}"
                 )
         logging.info(config_info)
 
@@ -216,7 +216,7 @@ def plot_producer_consumer_rates(ax: plt.Axes, start_time: float, producer_logs:
     ax.set(
         xlabel="Time (seconds)",
         ylabel="Items per second",
-        title=f"Node Throughput Rates",
+        title=f"Process Throughput Rates",
     )
     ax.grid(alpha=0.4, linestyle=":")
     ax.legend()
@@ -268,7 +268,7 @@ def create_simulation_state(sim_config: SimConfig) -> SimulationState:
     """Create and return a SimulationState dataclass with initialized shared resources."""
     queues = {}
     queue_history = {}
-    for item_type in sim_config.nodes:
+    for item_type in sim_config.processes:
         queues[item_type] = 0
         queue_history[item_type] = [(0.0, 0)]
 
@@ -287,10 +287,10 @@ def create_producer_consumer_states(sim_config: SimConfig) -> tuple[list[Produce
     producers = []
     consumers = []
 
-    for item_type, node in sim_config.nodes.items():
-        for i in range(node.producer.count):
+    for item_type, process in sim_config.processes.items():
+        for i in range(process.producer.count):
             producers.append(ProducerState(process_id=i, item_type=item_type))
-        for i in range(node.consumer.count):
+        for i in range(process.consumer.count):
             consumers.append(ConsumerState(process_id=i, item_type=item_type))
 
     return producers, consumers
@@ -361,16 +361,16 @@ def objective(trial):
     sim_state = run_simulation(sim_config)
 
     warmup_cutoff = sim_config.simulation_timeout_in_seconds * 0.5
-    queues = {item.value: [] for item in sim_config.nodes}
+    queues = {item.value: [] for item in sim_config.processes}
 
     for log in sim_state.queue_logs:
         if log.timestamp > warmup_cutoff:
             queues[log.queue_name].append(log.queue_usage)
 
     score = 0
-    for item in sim_config.nodes:
+    for item in sim_config.processes:
         series = queues[item.value]
-        capacity = sim_config.nodes[item].queue_capacity
+        capacity = sim_config.processes[item].queue_capacity
         score += oscillation_score(series, capacity)
 
     return float(score)
@@ -403,12 +403,12 @@ def oscillation_score(series, capacity):
 def apply_feedback_params(sim_config: SimConfig, sensitivity: float, delay: float):
     """Return a new SimConfig with updated sensitivity and delay."""
     
-    new_nodes = {}
+    new_processes = {}
 
-    for item_type, node in sim_config.nodes.items():
+    for item_type, process in sim_config.processes.items():
 
-        producer = node.producer
-        consumer = node.consumer
+        producer = process.producer
+        consumer = process.consumer
 
         if producer and producer.target_queue_occupancy is not None:
             producer = replace(
@@ -424,13 +424,13 @@ def apply_feedback_params(sim_config: SimConfig, sensitivity: float, delay: floa
                 feedback_delay=delay
             )
 
-        new_nodes[item_type] = replace(
-            node,
+        new_processes[item_type] = replace(
+            process,
             producer=producer,
             consumer=consumer
         )
 
-    return replace(sim_config, nodes=new_nodes)
+    return replace(sim_config, processes=new_processes)
 
 def stability_metrics(series):
     """Return stability components separately."""
@@ -544,7 +544,7 @@ def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode
     max_drift = (-np.inf, None)
 
     def extract_queue_series(sim_config, sim_state, warmup_cutoff):
-        queues = {item.value: [] for item in sim_config.nodes}
+        queues = {item.value: [] for item in sim_config.processes}
         for log in sim_state.queue_logs:
             if log.timestamp > warmup_cutoff:
                 queues[log.queue_name].append(log.queue_usage)
@@ -564,7 +564,7 @@ def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode
             diff_score = 0
             drift_score = 0
 
-            for item in sim_config.nodes:
+            for item in sim_config.processes:
                 series = queues[item.value]
 
                 std, diff, drift = stability_metrics(series)
@@ -591,7 +591,7 @@ def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode
         f"Grid searched {len(sensitivities) * len(delays)} parameter combinations "
         f"({len(sensitivities)} sensitivities × {len(delays)} delays)")
 
-    if mode == "complete":
+    if mode == "debug":
         plot_multiple_heatmaps(
             base_config,
             sensitivities, delays,
@@ -663,8 +663,8 @@ def create_sim_config(reaction_sensitivity: float, feedback_delay: float) -> Sim
         queue_interval=1.0,
         use_feedback=True,
         feedback_type = FeedbackType.OUTPUT,
-        nodes={
-            ItemType.IRON_INGOT: NodeConfig(
+        processes={
+            ItemType.IRON_INGOT: ProcessConfig(
                 queue_capacity=100,
                 producer=ProducerConfig(
                     count=1,
@@ -685,7 +685,7 @@ def create_sim_config(reaction_sensitivity: float, feedback_delay: float) -> Sim
                 ),
             ),
 
-            ItemType.IRON_ROD: NodeConfig(
+            ItemType.IRON_ROD: ProcessConfig(
                 queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1,
@@ -698,7 +698,7 @@ def create_sim_config(reaction_sensitivity: float, feedback_delay: float) -> Sim
                 ),
             ),
 
-            ItemType.IRON_WIRE: NodeConfig(
+            ItemType.IRON_WIRE: ProcessConfig(
                 queue_capacity=100,
                 consumer=ConsumerConfig(
                     count=1,
@@ -756,7 +756,7 @@ def main() -> None:
             sim_config,
             stability_config["sensitivities"],
             stability_config["delays"],
-            "complete"
+            "debug"
         )
 
 if __name__ == '__main__':

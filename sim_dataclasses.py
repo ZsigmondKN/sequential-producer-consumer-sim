@@ -78,7 +78,7 @@ class ConsumerConfig:
     feedback_delay: float = 0.0
 
 @dataclass(frozen=True)
-class NodeConfig:
+class ProcessConfig:
     queue_capacity: int
     producer: ProducerConfig = ProducerConfig()
     consumer: ConsumerConfig = ConsumerConfig()
@@ -89,4 +89,4 @@ class SimConfig:
     queue_interval: float
     use_feedback: bool
     feedback_type: FeedbackType
-    nodes: dict[ItemType, NodeConfig]
+    processes: dict[ItemType, ProcessConfig]
