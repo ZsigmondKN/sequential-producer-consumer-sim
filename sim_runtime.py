@@ -97,11 +97,14 @@ def get_queue_occupancy(history: list[tuple[float, int]], current_time: float, d
     return 0
 
 def calculate_adjusted_time(base_time: float, target_queue_occupancy: int, reaction_sensitivity: float, 
-    feedback_delay: float, queue_history: list[tuple[float, int]], sim_time: float) -> float:
+    feedback_delay: float, queue_history: list[tuple[float, int]], sim_time: float, current_queue: int) -> float:
     """Calculates the adjusted processing time using a smooth bounded S-curve."""
-    delayed_queue = get_queue_occupancy(queue_history, sim_time, feedback_delay)
-    dif_from_target = target_queue_occupancy - delayed_queue
-    
+    if feedback_delay is None or feedback_delay <= 0:
+        queue_value = current_queue
+    else:
+        queue_value = get_queue_occupancy(queue_history, sim_time, feedback_delay)
+    dif_from_target = target_queue_occupancy - queue_value
+
     # Calculate the raw control signal
     control_signal = reaction_sensitivity * dif_from_target
     
@@ -122,13 +125,17 @@ def compute_feedback_time(base_time, target, sensitivity, delay, sim_config, sim
             return base_time
 
         queue_history = simulation_state.queue_history[output_type]
-        return calculate_adjusted_time(base_time, target, sensitivity, delay, queue_history, sim_time)
+        current_queue = simulation_state.queues[output_type]
+
+        return calculate_adjusted_time(
+            base_time, target, sensitivity, delay, queue_history, sim_time, current_queue)
 
     elif sim_config.feedback_type == FeedbackType.INPUT:
         if input_type is None:
             return base_time
         queue_history = simulation_state.queue_history[input_type]
-        return calculate_adjusted_time(base_time, target, sensitivity, delay, queue_history, sim_time)
+        current_queue = simulation_state.queues[input_type]
+        return calculate_adjusted_time(base_time, target, sensitivity, delay, queue_history, sim_time, current_queue)
 
     elif sim_config.feedback_type == FeedbackType.DUAL:
         if input_type is None or output_type is None:
@@ -136,8 +143,10 @@ def compute_feedback_time(base_time, target, sensitivity, delay, sim_config, sim
 
         input_hist = simulation_state.queue_history[input_type]
         output_hist = simulation_state.queue_history[output_type]
-        input_time = calculate_adjusted_time(base_time, target, sensitivity, delay, input_hist, sim_time)
-        output_time = calculate_adjusted_time(base_time, target, sensitivity, delay, output_hist, sim_time)
+        input_current = simulation_state.queues[input_type]
+        output_current = simulation_state.queues[output_type]
+        input_time = calculate_adjusted_time(base_time, target, sensitivity, delay, input_hist, sim_time, input_current)
+        output_time = calculate_adjusted_time(base_time, target, sensitivity, delay, output_hist, sim_time, output_current)
 
         return min(input_time, output_time)
 
@@ -739,25 +748,26 @@ def main() -> None:
         )
     ]
     for scenario in [
-        sim_scenarios.get_multiple_oscillations_input_f,
-        sim_scenarios.get_multiple_oscillations_output_f,
-        sim_scenarios.get_multiple_oscillations_dual_f,
+        # sim_scenarios.get_multiple_oscillations_input_f,
+        # sim_scenarios.get_multiple_oscillations_output_f,
+        # sim_scenarios.get_multiple_oscillations_dual_f,
+        sim_scenarios.get_second_order_sim_no_delay_output_feedback,
     ]:
 
         sim_config, stability_config = scenario()
 
         run_individual(sim_config)
 
-        logging.info(
-            f"Running {len(stability_config['sensitivities']) * len(stability_config['delays'])} stability experiments..."
-        )
+        # logging.info(
+        #     f"Running {len(stability_config['sensitivities']) * len(stability_config['delays'])} stability experiments..."
+        # )
 
-        run_stability_experiment(
-            sim_config,
-            stability_config["sensitivities"],
-            stability_config["delays"],
-            "debug"
-        )
+        # run_stability_experiment(
+        #     sim_config,
+        #     stability_config["sensitivities"],
+        #     stability_config["delays"],
+        #     "debug"
+        # )
 
 if __name__ == '__main__':
     main()

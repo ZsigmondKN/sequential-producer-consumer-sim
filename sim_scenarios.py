@@ -191,6 +191,53 @@ def get_multiple_oscillations_output_f() -> tuple[dict, SimConfig]:
     )
     return sim_config, stability_config
 
+def get_second_order_sim_no_delay_output_feedback() -> tuple[SimConfig, dict]:
+    """Configuration extracted from the optimized run producing stable oscillations."""
+
+    stability_config = {
+        "process_one_sensitivity": np.linspace(0.01, 20, 25),
+        "process_two_sensitivity": np.linspace(0.01, 20, 25),
+    }
+
+    sim_config = SimConfig(
+        simulation_timeout_in_seconds=500,
+        queue_interval=1.0,
+        use_feedback=True,
+        feedback_type = FeedbackType.OUTPUT,
+        processes={
+            ItemType.IRON_INGOT: ProcessConfig(
+                queue_capacity=100,
+                producer=ProducerConfig(
+                    count=1,
+                    output=ItemType.IRON_INGOT,
+                    production_time=1.0,
+                    target_queue_occupancy=50,
+                    reaction_sensitivity=20.0,
+                ),
+                consumer=ConsumerConfig(
+                    count=1,
+                    input=ItemType.IRON_INGOT,
+                    output=ItemType.IRON_ROD,
+                    consumption_time=1.0,
+                    target_queue_occupancy=50,
+                    reaction_sensitivity=20.0,
+                ),
+            ),
+            ItemType.IRON_ROD: ProcessConfig(
+                queue_capacity=100,
+                consumer=ConsumerConfig(
+                    count=1, 
+                    input=ItemType.IRON_ROD, 
+                    consumption_time=1.0, 
+                    target_queue_occupancy=50, 
+                    reaction_sensitivity=20.0, 
+                ),
+            ),
+        }
+    )
+
+    return sim_config, stability_config
+
 def get_a_single_oscillation() -> SimConfig:
     """Configuration extracted from the optimized run producing stable oscillations."""
     return SimConfig(
