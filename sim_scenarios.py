@@ -10,8 +10,11 @@ def get_multiple_oscillations_dual_f() -> tuple[SimConfig, dict]:
     """Configuration extracted from the optimized run producing stable oscillations."""
 
     stability_config = {
-        "sensitivities": np.linspace(0.01, 5, 25),
-        "delays": np.linspace(1, 100, 25),
+        "mode": "global",
+        "x_param": "global_sensitivity",
+        "y_param": "global_delay",
+        "x_values": np.linspace(0.01, 5, 25),
+        "y_values": np.linspace(1, 100, 25),
     }
 
     sim_config = SimConfig(
@@ -72,8 +75,11 @@ def get_multiple_oscillations_input_f() -> tuple[SimConfig, dict]:
     """Configuration extracted from the optimized run producing stable oscillations."""
 
     stability_config = {
-        "sensitivities": np.linspace(0.01, 5, 25),
-        "delays": np.linspace(1, 100, 25),
+        "mode": "global",
+        "x_param": "global_sensitivity",
+        "y_param": "global_delay",
+        "x_values": np.linspace(0.01, 5, 25),
+        "y_values": np.linspace(1, 100, 25),
     }
 
     sim_config = SimConfig(
@@ -132,10 +138,15 @@ def get_multiple_oscillations_input_f() -> tuple[SimConfig, dict]:
 
 def get_multiple_oscillations_output_f() -> tuple[dict, SimConfig]:
     """Configuration extracted from the optimized run producing stable oscillations."""
+
     stability_config = {
-        "sensitivities" : np.linspace(0.01, 5, 25),
-        "delays" : np.linspace(1, 100, 25)
+        "mode": "global",
+        "x_param": "global_sensitivity",
+        "y_param": "global_delay",
+        "x_values": np.linspace(0.01, 5, 25),
+        "y_values": np.linspace(1, 100, 25),
     }
+    
     sim_config =  SimConfig(
         simulation_timeout_in_seconds=500,
         queue_interval=1.0,
@@ -195,8 +206,14 @@ def get_second_order_sim_no_delay_output_feedback() -> tuple[SimConfig, dict]:
     """Configuration extracted from the optimized run producing stable oscillations."""
 
     stability_config = {
-        "process_one_sensitivity": np.linspace(0.01, 20, 25),
-        "process_two_sensitivity": np.linspace(0.01, 20, 25),
+        "mode": "split",
+        "x_param": "IRON_INGOT_producer_sensitivity",
+        "y_param": "IRON_INGOT_consumer_sensitivity",
+        "fixed_params": {
+            "IRON_ROD_consumer_sensitivity": 1.0
+        },
+        "x_values": np.linspace(0.01, 5, 25),
+        "y_values": np.linspace(0.01, 5, 25)
     }
 
     sim_config = SimConfig(
@@ -212,7 +229,7 @@ def get_second_order_sim_no_delay_output_feedback() -> tuple[SimConfig, dict]:
                     output=ItemType.IRON_INGOT,
                     production_time=1.0,
                     target_queue_occupancy=50,
-                    reaction_sensitivity=20.0,
+                    reaction_sensitivity=1.0,
                 ),
                 consumer=ConsumerConfig(
                     count=1,
@@ -220,7 +237,7 @@ def get_second_order_sim_no_delay_output_feedback() -> tuple[SimConfig, dict]:
                     output=ItemType.IRON_ROD,
                     consumption_time=1.0,
                     target_queue_occupancy=50,
-                    reaction_sensitivity=20.0,
+                    reaction_sensitivity=1.0,
                 ),
             ),
             ItemType.IRON_ROD: ProcessConfig(
@@ -230,7 +247,7 @@ def get_second_order_sim_no_delay_output_feedback() -> tuple[SimConfig, dict]:
                     input=ItemType.IRON_ROD, 
                     consumption_time=1.0, 
                     target_queue_occupancy=50, 
-                    reaction_sensitivity=20.0, 
+                    reaction_sensitivity=1.0, 
                 ),
             ),
         }

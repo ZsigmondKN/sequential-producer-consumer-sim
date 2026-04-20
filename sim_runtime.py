@@ -110,7 +110,8 @@ def calculate_adjusted_time(base_time: float, target_queue_occupancy: int, react
     
     # Use exp() and atan() to gracefully bound the time variation
     # This acts as a natural limit, preventing the process from going to sleep forever
-    time_multiplier = math.exp(-math.atan(control_signal))
+    # time_multiplier = math.exp(-math.atan(control_signal))
+    time_multiplier = 1 / (1 + control_signal)
     
     return base_time * time_multiplier
 
@@ -409,9 +410,14 @@ def oscillation_score(series, capacity):
 # Stability Analysis
 # ==================================================================================================
 
-def apply_feedback_params(sim_config: SimConfig, sensitivity: float, delay: float):
-    """Return a new SimConfig with updated sensitivity and delay."""
-    
+def apply_feedback_params(sim_config: SimConfig, param_dict: dict[str, float]) -> SimConfig:
+    """Return a new SimConfig with updated feedback parameters using hierarchical overrides."""
+
+    def resolve(param_dict, specific_key, global_key, default):
+        """Helper to resolve parameter with fallback hierarchy."""
+        return param_dict.get(specific_key,
+               param_dict.get(global_key, default))
+
     new_processes = {}
 
     for item_type, process in sim_config.processes.items():
@@ -422,15 +428,35 @@ def apply_feedback_params(sim_config: SimConfig, sensitivity: float, delay: floa
         if producer and producer.target_queue_occupancy is not None:
             producer = replace(
                 producer,
-                reaction_sensitivity=sensitivity,
-                feedback_delay=delay
+                reaction_sensitivity=resolve(
+                    param_dict,
+                    f"{item_type.name}_producer_sensitivity",
+                    "global_sensitivity",
+                    producer.reaction_sensitivity
+                ),
+                feedback_delay=resolve(
+                    param_dict,
+                    f"{item_type.name}_producer_delay",
+                    "global_delay",
+                    producer.feedback_delay
+                )
             )
 
         if consumer and consumer.target_queue_occupancy is not None:
             consumer = replace(
                 consumer,
-                reaction_sensitivity=sensitivity,
-                feedback_delay=delay
+                reaction_sensitivity=resolve(
+                    param_dict,
+                    f"{item_type.name}_consumer_sensitivity",
+                    "global_sensitivity",
+                    consumer.reaction_sensitivity
+                ),
+                feedback_delay=resolve(
+                    param_dict,
+                    f"{item_type.name}_consumer_delay",
+                    "global_delay",
+                    consumer.feedback_delay
+                )
             )
 
         new_processes[item_type] = replace(
@@ -458,15 +484,29 @@ def stability_metrics(series):
 
     return standard_deviation, step_variability, drift
 
-def rerun_point(base_config, sensitivities, delays, idx):
-    i, j = idx
-    s = sensitivities[i]
-    d = delays[j]
-    cfg = apply_feedback_params(base_config, s, d)
-    return run_simulation(cfg), s, d
+def run_parametrized_simulation(base_config, x, y, stability_config):
 
-def plot_multiple_heatmaps(base_config, sensitivities, delays, std_matrix, diff_matrix, drift_matrix, 
-                           max_std, max_diff, max_drift, feedback_type):
+    param_dict = dict(stability_config.get("fixed_params", {}))
+
+    param_dict[stability_config["x_param"]] = x
+    param_dict[stability_config["y_param"]] = y
+
+    sim_config = apply_feedback_params(base_config, param_dict)
+    sim_state = run_simulation(sim_config)
+
+    return sim_state, sim_config
+
+def rerun_point(base_config, x_values, y_values, idx, stability_config):
+    i, j = idx
+    x = x_values[i]
+    y = y_values[j]
+
+    sim_state, _ = run_parametrized_simulation(base_config, x, y, stability_config)
+
+    return sim_state, x, y
+
+def plot_multiple_heatmaps(base_config, x_values, y_values, std_matrix, diff_matrix, drift_matrix, 
+                           max_std, max_diff, max_drift, feedback_type, stability_config):
     fig, axes = plt.subplots(2, 3, figsize=(14, 8))
     top_axes = axes[0]
     bottom_axes = axes[1]
@@ -487,14 +527,14 @@ def plot_multiple_heatmaps(base_config, sensitivities, delays, std_matrix, diff_
     max_points = [max_std, max_diff, max_drift]
 
     for ax, matrix, max_point, map_title in zip(top_axes, matrices, max_points, map_titles):
-        dx = delays[1] - delays[0]
-        dy = sensitivities[1] - sensitivities[0]
+        dx = x_values[1] - x_values[0]
+        dy = y_values[1] - y_values[0]
 
         extent = [
-            delays[0] - dx/2,
-            delays[-1] + dx/2,
-            sensitivities[0] - dy/2,
-            sensitivities[-1] + dy/2
+            x_values[0] - dx/2,
+            x_values[-1] + dx/2,
+            y_values[0] - dy/2,
+            y_values[-1] + dy/2
         ]
         im = ax.imshow(
             matrix,
@@ -505,19 +545,19 @@ def plot_multiple_heatmaps(base_config, sensitivities, delays, std_matrix, diff_
 
         i, j = max_point[1]
 
-        d_center = delays[j] + 0.1 # offset to align with the center of the cell
-        s_center = sensitivities[i]
+        x_center  = x_values[j] + 0.1 # offset to align with the center of the cell
+        y_center = y_values[i]
 
-        ax.plot(d_center, s_center, 'ro', label='Maximum instability')
+        ax.plot(x_center, y_center, 'ro', label='Maximum instability')
         ax.legend()
 
         ax.set_title(map_title)
-        ax.set_xlabel("Delay")
-        ax.set_ylabel("Sensitivity")
+        ax.set_xlabel(stability_config["x_param"])
+        ax.set_ylabel(stability_config["y_param"])
         fig.colorbar(im, ax=ax)
 
     for ax, max_point, sim_title in zip(bottom_axes, max_points, sim_titles):
-        sim_state, s, d = rerun_point(base_config, sensitivities, delays, max_point[1])
+        sim_state, x, y = rerun_point(base_config, x_values, y_values, max_point[1], stability_config)
 
         plot_queue_occupancy_over_time(ax, 0.0, sim_state.queue_logs)
 
@@ -543,10 +583,13 @@ def plot_stability_heatmap(sensitivities, delays, matrix, feedback_type):
 
     plt.show()
 
-def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode=None):
-    std_matrix = np.zeros((len(sensitivities), len(delays)))
-    diff_matrix = np.zeros((len(sensitivities), len(delays)))
-    drift_matrix = np.zeros((len(sensitivities), len(delays)))
+def run_stability_experiment(base_config: SimConfig, stability_config: dict, debug=False):
+    x_values = stability_config["x_values"]
+    y_values = stability_config["y_values"]
+
+    std_matrix = np.zeros((len(x_values), len(y_values)))
+    diff_matrix = np.zeros((len(x_values), len(y_values)))
+    drift_matrix = np.zeros((len(x_values), len(y_values)))
 
     max_std = (-np.inf, None)
     max_diff = (-np.inf, None)
@@ -559,12 +602,10 @@ def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode
                 queues[log.queue_name].append(log.queue_usage)
         return queues
 
-    for i, sensitivity in enumerate(sensitivities):
-        for j, delay in enumerate(delays):
+    for i, x in enumerate(x_values):
+        for j, y in enumerate(y_values):
 
-            sim_config = apply_feedback_params(base_config, sensitivity, delay)
-
-            sim_state = run_simulation(sim_config)
+            sim_state, sim_config = run_parametrized_simulation(base_config, x, y, stability_config)
 
             warmup_cutoff = sim_config.simulation_timeout_in_seconds * 0.5
             queues = extract_queue_series(sim_config, sim_state, warmup_cutoff)
@@ -597,22 +638,20 @@ def run_stability_experiment(base_config: SimConfig, sensitivities, delays, mode
 
     logging.info("\n--- Stability Experiment Finished ---")
     logging.info(
-        f"Grid searched {len(sensitivities) * len(delays)} parameter combinations "
-        f"({len(sensitivities)} sensitivities × {len(delays)} delays)")
+        f"Grid searched {len(x_values) * len(y_values)} parameter combinations "
+        f"({len(x_values)} x-values × {len(y_values)} y-values)")
 
-    if mode == "debug":
+    if debug:
         plot_multiple_heatmaps(
             base_config,
-            sensitivities, delays,
+            x_values, y_values,
             std_matrix, diff_matrix, drift_matrix,
             max_std, max_diff, max_drift,
-            base_config.feedback_type
+            base_config.feedback_type, stability_config
         )
     else:
         plot_stability_heatmap(
-            sensitivities, delays, std_matrix,
-            base_config.feedback_type,
-            title_suffix="(Standard Deviation)"
+            x_values, y_values, std_matrix, base_config.feedback_type
         )
 
 
@@ -645,16 +684,6 @@ def run_optuna() -> None:
     log_simulation_parameters(best_sim_config)
     log_results(best_sim_state)
     plot_results(best_sim_state)
-
-def run_stability_analysis(mode=None):
-
-    sensitivities = np.linspace(0.01, 5, 25)
-    delays = np.linspace(1, 100, 25)
-
-    base_config = create_sim_config(0.05, 10)
-
-    logging.info(f"Running {len(sensitivities) * len(delays)} stability experiments...")
-    run_stability_experiment(base_config, sensitivities, delays, mode)
 
 def run_individual(sim_config: SimConfig, shocks=None) -> None:
     sim_state = run_simulation(sim_config, shocks)
@@ -737,7 +766,6 @@ def main() -> None:
 
     # ======== Experiments ========
     # run_optuna()
-    # run_stability_analysis()
 
     # ======== Individual Scenarios ========
     shocks = [
@@ -758,16 +786,15 @@ def main() -> None:
 
         run_individual(sim_config)
 
-        # logging.info(
-        #     f"Running {len(stability_config['sensitivities']) * len(stability_config['delays'])} stability experiments..."
-        # )
+        logging.info(
+            f"Running {len(stability_config.get("x_values")) * len(stability_config.get("y_values"))} stability experiments..."
+        )
 
-        # run_stability_experiment(
-        #     sim_config,
-        #     stability_config["sensitivities"],
-        #     stability_config["delays"],
-        #     "debug"
-        # )
+        run_stability_experiment(
+            sim_config,
+            stability_config,
+            debug=True
+        )
 
 if __name__ == '__main__':
     main()
