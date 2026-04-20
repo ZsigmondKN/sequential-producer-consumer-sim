@@ -38,7 +38,7 @@ def producer(state: ProducerState, simulation_state: SimulationState, sim_config
     if sim_config.use_feedback:
         next_production_time = compute_feedback_time(base_production_time, process.producer.target_queue_occupancy,
             process.producer.reaction_sensitivity, process.producer.feedback_delay, sim_config, simulation_state,
-            None, output_type, sim_time)
+            None, output_type, sim_time, state, 0.1, state.last_update_time)
     else:
         next_production_time = base_production_time
 
@@ -68,7 +68,7 @@ def consumer(state: ConsumerState, simulation_state: SimulationState, sim_config
     if sim_config.use_feedback:
         adjusted_consumption_time = compute_feedback_time(consumption_time, process.consumer.target_queue_occupancy,
             process.consumer.reaction_sensitivity, process.consumer.feedback_delay, sim_config, simulation_state,
-            input_type, output_type, sim_time)
+            input_type, output_type, sim_time, state, 0.1, state.last_update_time)
     else:
         adjusted_consumption_time = consumption_time
 
@@ -96,27 +96,46 @@ def get_queue_occupancy(history: list[tuple[float, int]], current_time: float, d
             return occupancy
     return 0
 
+def update_control_with_inertia(state, error, sensitivity, damping, dt):
+    # acceleration = proportional force - damping
+    accel = sensitivity * error - damping * state.control_velocity
+    
+    # integrate velocity
+    state.control_velocity += accel * dt
+    
+    return state.control_velocity
+
 def calculate_adjusted_time(base_time: float, target_queue_occupancy: int, reaction_sensitivity: float, 
-    feedback_delay: float, queue_history: list[tuple[float, int]], sim_time: float, current_queue: int) -> float:
+    feedback_delay: float, queue_history: list[tuple[float, int]], sim_time: float, current_queue: int,
+    damping, state: ProducerState | ConsumerState, last_time: float, override_error=None) -> float:
     """Calculates the adjusted processing time using a smooth bounded S-curve."""
-    if feedback_delay is None or feedback_delay <= 0:
-        queue_value = current_queue
+    if override_error is not None:
+        dif_from_target = override_error
     else:
-        queue_value = get_queue_occupancy(queue_history, sim_time, feedback_delay)
-    dif_from_target = target_queue_occupancy - queue_value
+        if feedback_delay is None or feedback_delay <= 0:
+            queue_value = current_queue
+        else:
+            queue_value = get_queue_occupancy(queue_history, sim_time, feedback_delay)
+
+        dif_from_target = target_queue_occupancy - queue_value
+
+    dt = min(max(sim_time - last_time, 1e-6), 1.0)
+
+    v = update_control_with_inertia(state, dif_from_target, reaction_sensitivity, damping, dt)
+
+    state.last_update_time = sim_time
 
     # Calculate the raw control signal
-    control_signal = reaction_sensitivity * dif_from_target
+    # control_signal = reaction_sensitivity * dif_from_target
     
     # Use exp() and atan() to gracefully bound the time variation
     # This acts as a natural limit, preventing the process from going to sleep forever
-    # time_multiplier = math.exp(-math.atan(control_signal))
-    time_multiplier = 1 / (1 + control_signal)
+    time_multiplier = math.exp(-math.atan(v))
     
     return base_time * time_multiplier
 
 def compute_feedback_time(base_time, target, sensitivity, delay, sim_config, simulation_state, 
-    input_type, output_type, sim_time):
+    input_type, output_type, sim_time, state, damping, last_update_time):
 
     if target is None:
         return base_time
@@ -129,27 +148,31 @@ def compute_feedback_time(base_time, target, sensitivity, delay, sim_config, sim
         current_queue = simulation_state.queues[output_type]
 
         return calculate_adjusted_time(
-            base_time, target, sensitivity, delay, queue_history, sim_time, current_queue)
+            base_time, target, sensitivity, delay, queue_history, sim_time, current_queue, damping, state, last_update_time)
 
     elif sim_config.feedback_type == FeedbackType.INPUT:
         if input_type is None:
             return base_time
         queue_history = simulation_state.queue_history[input_type]
         current_queue = simulation_state.queues[input_type]
-        return calculate_adjusted_time(base_time, target, sensitivity, delay, queue_history, sim_time, current_queue)
+        return calculate_adjusted_time(base_time, target, sensitivity, delay, queue_history, sim_time, current_queue, damping, state, last_update_time)
 
     elif sim_config.feedback_type == FeedbackType.DUAL:
         if input_type is None or output_type is None:
-                return base_time
+            return base_time
 
-        input_hist = simulation_state.queue_history[input_type]
-        output_hist = simulation_state.queue_history[output_type]
-        input_current = simulation_state.queues[input_type]
-        output_current = simulation_state.queues[output_type]
-        input_time = calculate_adjusted_time(base_time, target, sensitivity, delay, input_hist, sim_time, input_current)
-        output_time = calculate_adjusted_time(base_time, target, sensitivity, delay, output_hist, sim_time, output_current)
+        input_q = simulation_state.queues[input_type]
+        output_q = simulation_state.queues[output_type]
 
-        return min(input_time, output_time)
+        # simplest: average error
+        combined_error = (
+            (target - input_q) +
+            (target - output_q)
+        ) * 0.5
+
+        return calculate_adjusted_time(
+            base_time, target, sensitivity, delay, None, sim_time, None, damping, state, last_update_time, combined_error
+        )
 
 # ==================================================================================================
 # Reporting - logs and diagrams

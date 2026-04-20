@@ -36,6 +36,8 @@ class ProducerState:
     process_id: int
     item_type: ItemType
     next_ready_time: float = 0.0
+    control_velocity: float = 0.0
+    last_update_time: float = 0.0
 
 
 @dataclass
@@ -43,6 +45,8 @@ class ConsumerState:
     process_id: int
     item_type: ItemType
     next_ready_time: float = 0.0
+    control_velocity: float = 0.0
+    last_update_time: float = 0.0
 
 @dataclass
 class SimulationLogs:
