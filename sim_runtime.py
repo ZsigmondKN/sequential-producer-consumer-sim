@@ -128,8 +128,7 @@ def calculate_adjusted_time(base_time: float, target_queue_occupancy: int, react
     # Calculate the raw control signal
     # control_signal = reaction_sensitivity * dif_from_target
     
-    # Use exp() and atan() to gracefully bound the time variation
-    # This acts as a natural limit, preventing the process from going to sleep forever
+    # This represents an inertial P contorller 
     time_multiplier = math.exp(-math.atan(v))
     
     return base_time * time_multiplier
@@ -340,13 +339,6 @@ def run_simulation(sim_config: SimConfig, shocks=None) -> SimulationState:
     processes = producers_state + consumers_state
 
     while sim_time < duration:
-        # execute all ready processes
-        for state in processes:
-            if state.next_ready_time <= sim_time:
-                if isinstance(state, ProducerState):
-                    producer(state, simulation_state, sim_config, sim_time)
-                else:
-                    consumer(state, simulation_state, sim_config, sim_time)
 
         # apply pending outputs whose time has arrived
         ready_outputs = [p for p in simulation_state.pending_outputs if p[0] <= sim_time]
@@ -358,6 +350,15 @@ def run_simulation(sim_config: SimConfig, shocks=None) -> SimulationState:
 
         simulation_state.pending_outputs = [p for p in simulation_state.pending_outputs if p[0] > sim_time]
 
+        # execute all ready processes
+        for state in processes:
+            if state.next_ready_time <= sim_time:
+                if isinstance(state, ProducerState):
+                    producer(state, simulation_state, sim_config, sim_time)
+                else:
+                    consumer(state, simulation_state, sim_config, sim_time)
+
+        # determine the next event time (either a process becoming ready or an output appearing) to jump to
         process_times = [p.next_ready_time for p in processes if p.next_ready_time > sim_time]
         output_times = [t for t, _ in simulation_state.pending_outputs if t > sim_time]
 
@@ -373,7 +374,9 @@ def run_simulation(sim_config: SimConfig, shocks=None) -> SimulationState:
                 simulation_state.queue_logs.append(QueueLogs(item_type.value, occupancy, next_queue_log_time))
             next_queue_log_time += queue_interval
         
+        # advance time to the next event
         sim_time = next_event_time
+        
     return simulation_state
 
 # ==================================================================================================
@@ -802,22 +805,23 @@ def main() -> None:
         # sim_scenarios.get_multiple_oscillations_input_f,
         # sim_scenarios.get_multiple_oscillations_output_f,
         # sim_scenarios.get_multiple_oscillations_dual_f,
-        sim_scenarios.get_second_order_sim_no_delay_output_feedback,
+        # sim_scenarios.get_second_order_sim_no_delay_output_feedback,
+        sim_scenarios.get_blocking
     ]:
 
         sim_config, stability_config = scenario()
 
         run_individual(sim_config)
 
-        logging.info(
-            f"Running {len(stability_config.get("x_values")) * len(stability_config.get("y_values"))} stability experiments..."
-        )
+        # logging.info(
+        #     f"Running {len(stability_config.get("x_values")) * len(stability_config.get("y_values"))} stability experiments..."
+        # )
 
-        run_stability_experiment(
-            sim_config,
-            stability_config,
-            debug=True
-        )
+        # run_stability_experiment(
+        #     sim_config,
+        #     stability_config,
+        #     debug=True
+        # )
 
 if __name__ == '__main__':
     main()

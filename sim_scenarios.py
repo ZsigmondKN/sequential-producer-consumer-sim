@@ -255,9 +255,10 @@ def get_second_order_sim_no_delay_output_feedback() -> tuple[SimConfig, dict]:
 
     return sim_config, stability_config
 
-def get_a_single_oscillation() -> SimConfig:
+def get_a_single_oscillation() -> tuple[SimConfig, None]:
     """Configuration extracted from the optimized run producing stable oscillations."""
-    return SimConfig(
+    stability_config = None
+    sim_config = SimConfig(
         simulation_timeout_in_seconds=500,
         queue_interval=1.0,
         use_feedback=True,
@@ -281,10 +282,12 @@ def get_a_single_oscillation() -> SimConfig:
             ),
         }
     )
+    return sim_config, stability_config
 
-def get_smooth_waves() -> SimConfig:
+def get_smooth_waves() -> tuple[SimConfig, None]:
     """A balanced setup that creates beautiful, sustained, rolling waves."""
-    return SimConfig(
+    stability_config = None
+    sim_config = SimConfig(
         simulation_timeout_in_seconds=250,
         queue_interval=1.0,
         use_feedback=True,
@@ -332,10 +335,12 @@ def get_smooth_waves() -> SimConfig:
             )
         }
     )
+    return sim_config, stability_config
 
-def get_blocking() -> SimConfig:
+def get_blocking() -> tuple[SimConfig, None]:
     """A balanced setup that creates beautiful, sustained, rolling waves."""
-    return SimConfig(
+    stability_config = None
+    sim_config = SimConfig(
         simulation_timeout_in_seconds=60,
         queue_interval=1.0,
         use_feedback=False,
@@ -374,3 +379,4 @@ def get_blocking() -> SimConfig:
             )
         }
     )
+    return sim_config, stability_config
