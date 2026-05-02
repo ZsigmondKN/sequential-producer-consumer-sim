@@ -337,8 +337,113 @@ def get_smooth_waves() -> tuple[SimConfig, None]:
     )
     return sim_config, stability_config
 
-def get_bottleneck_propagation() -> tuple[SimConfig, None]:
-    """A balanced setup that creates beautiful, sustained, rolling waves."""
+def get_balanced_flow() -> tuple[SimConfig, None]:
+    stability_config = None
+    sim_config = SimConfig(
+        simulation_timeout_in_seconds=60,
+        queue_interval=1.0,
+        use_feedback=False,
+        feedback_type = FeedbackType.OUTPUT,
+        processes={
+            ItemType.IRON_INGOT: ProcessConfig(
+                queue_capacity=10,  
+                producer=ProducerConfig(
+                    count=1, 
+                    output=ItemType.IRON_INGOT, 
+                    production_time=0.5
+                ),
+                consumer=ConsumerConfig(
+                    count=2, 
+                    input=ItemType.IRON_INGOT, 
+                    output=ItemType.IRON_ROD,
+                    consumption_time=1.0
+                ),
+            ),
+            ItemType.IRON_ROD: ProcessConfig(
+                queue_capacity=10,
+                consumer=ConsumerConfig(
+                    count=1, 
+                    input=ItemType.IRON_ROD, 
+                    consumption_time=0.5
+                ),
+            ),
+        }
+    )
+    return sim_config, stability_config
+
+
+def get_bottleneck() -> tuple[SimConfig, None]:
+    stability_config = None
+    sim_config = SimConfig(
+        simulation_timeout_in_seconds=60,
+        queue_interval=1.0,
+        use_feedback=False,
+        feedback_type = FeedbackType.OUTPUT,
+        processes={
+            ItemType.IRON_INGOT: ProcessConfig(
+                queue_capacity=10,  
+                producer=ProducerConfig(
+                    count=1, 
+                    output=ItemType.IRON_INGOT, 
+                    production_time=0.5
+                ),
+                consumer=ConsumerConfig(
+                    count=1, 
+                    input=ItemType.IRON_INGOT, 
+                    output=ItemType.IRON_ROD,
+                    consumption_time=1.0
+                ),
+            ),
+            ItemType.IRON_ROD: ProcessConfig(
+                queue_capacity=10,
+                consumer=ConsumerConfig(
+                    count=1, 
+                    input=ItemType.IRON_ROD, 
+                    consumption_time=0.5
+                ),
+            ),
+        }
+    )
+    return sim_config, stability_config
+
+def get_starvation() -> tuple[SimConfig, None]:
+    stability_config = None
+    sim_config = SimConfig(
+        simulation_timeout_in_seconds=60,
+        queue_interval=1.0,
+        use_feedback=False,
+        feedback_type = FeedbackType.OUTPUT,
+        initial_queue_occupancy={
+            ItemType.IRON_INGOT: 10,
+        },
+        processes={
+            ItemType.IRON_INGOT: ProcessConfig(
+                queue_capacity=10,  
+                producer=ProducerConfig(
+                    count=1, 
+                    output=ItemType.IRON_INGOT, 
+                    production_time=1.0
+                ),
+                consumer=ConsumerConfig(
+                    count=1, 
+                    input=ItemType.IRON_INGOT, 
+                    output=ItemType.IRON_ROD,
+                    consumption_time=0.5
+                ),
+            ),
+            ItemType.IRON_ROD: ProcessConfig(
+                queue_capacity=10,
+                consumer=ConsumerConfig(
+                    count=1, 
+                    input=ItemType.IRON_ROD, 
+                    consumption_time=0.5
+                ),
+            ),
+        }
+    )
+    return sim_config, stability_config
+
+def get_backpressure_propagation() -> tuple[SimConfig, None]:
     stability_config = None
     sim_config = SimConfig(
         simulation_timeout_in_seconds=60,

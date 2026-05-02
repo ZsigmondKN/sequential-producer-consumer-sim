@@ -96,3 +96,4 @@ class SimConfig:
     use_feedback: bool
     feedback_type: FeedbackType
     processes: dict[ItemType, ProcessConfig]
+    initial_queue_occupancy: dict[ItemType, int] = field(default_factory=dict)

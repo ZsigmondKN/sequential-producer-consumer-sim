@@ -301,8 +301,9 @@ def create_simulation_state(sim_config: SimConfig) -> SimulationState:
     queues = {}
     queue_history = {}
     for item_type in sim_config.processes:
-        queues[item_type] = 0
-        queue_history[item_type] = [(0.0, 0)]
+        initial_occupancy = sim_config.initial_queue_occupancy.get(item_type, 0)
+        queues[item_type] = initial_occupancy
+        queue_history[item_type] = [(0.0, initial_occupancy)]
 
     return SimulationState(
         producer_logs=[],
@@ -802,26 +803,29 @@ def main() -> None:
         )
     ]
     for scenario in [
-        sim_scenarios.get_multiple_oscillations_input_f,
-        sim_scenarios.get_multiple_oscillations_output_f,
-        sim_scenarios.get_multiple_oscillations_dual_f,
+        # sim_scenarios.get_multiple_oscillations_input_f,
+        # sim_scenarios.get_multiple_oscillations_output_f,
+        # sim_scenarios.get_multiple_oscillations_dual_f,
         # sim_scenarios.get_second_order_sim_no_delay_output_feedback,
-        sim_scenarios.get_bottleneck_propagation
+        sim_scenarios.get_balanced_flow,
+        sim_scenarios.get_bottleneck,
+        sim_scenarios.get_starvation,
+        sim_scenarios.get_backpressure_propagation,
     ]:
 
         sim_config, stability_config = scenario()
 
         run_individual(sim_config)
 
-        logging.info(
-            f"Running {len(stability_config.get("x_values")) * len(stability_config.get("y_values"))} stability experiments..."
-        )
+        # logging.info(
+        #     f"Running {len(stability_config.get("x_values")) * len(stability_config.get("y_values"))} stability experiments..."
+        # )
 
-        run_stability_experiment(
-            sim_config,
-            stability_config,
-            debug=True
-        )
+        # run_stability_experiment(
+        #     sim_config,
+        #     stability_config,
+        #     debug=True
+        # )
 
 if __name__ == '__main__':
     main()
