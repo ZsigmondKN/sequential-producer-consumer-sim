@@ -802,26 +802,26 @@ def main() -> None:
         )
     ]
     for scenario in [
-        # sim_scenarios.get_multiple_oscillations_input_f,
-        # sim_scenarios.get_multiple_oscillations_output_f,
-        # sim_scenarios.get_multiple_oscillations_dual_f,
+        sim_scenarios.get_multiple_oscillations_input_f,
+        sim_scenarios.get_multiple_oscillations_output_f,
+        sim_scenarios.get_multiple_oscillations_dual_f,
         # sim_scenarios.get_second_order_sim_no_delay_output_feedback,
-        sim_scenarios.get_blocking
+        sim_scenarios.get_bottleneck_propagation
     ]:
 
         sim_config, stability_config = scenario()
 
         run_individual(sim_config)
 
-        # logging.info(
-        #     f"Running {len(stability_config.get("x_values")) * len(stability_config.get("y_values"))} stability experiments..."
-        # )
+        logging.info(
+            f"Running {len(stability_config.get("x_values")) * len(stability_config.get("y_values"))} stability experiments..."
+        )
 
-        # run_stability_experiment(
-        #     sim_config,
-        #     stability_config,
-        #     debug=True
-        # )
+        run_stability_experiment(
+            sim_config,
+            stability_config,
+            debug=True
+        )
 
 if __name__ == '__main__':
     main()

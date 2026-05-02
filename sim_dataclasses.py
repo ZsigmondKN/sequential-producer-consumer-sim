@@ -9,6 +9,8 @@ class ItemType(Enum):
     IRON_INGOT = "Iron Ingot"
     IRON_ROD = "Iron Rod"
     IRON_WIRE = "Iron Wire"
+    IRON_MESH = "Iron Mesh"
+    IRON_FILTER = "Iron Filter"
 
 class FeedbackType(Enum):
     OUTPUT = "output_queue"

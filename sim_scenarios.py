@@ -337,7 +337,7 @@ def get_smooth_waves() -> tuple[SimConfig, None]:
     )
     return sim_config, stability_config
 
-def get_blocking() -> tuple[SimConfig, None]:
+def get_bottleneck_propagation() -> tuple[SimConfig, None]:
     """A balanced setup that creates beautiful, sustained, rolling waves."""
     stability_config = None
     sim_config = SimConfig(
